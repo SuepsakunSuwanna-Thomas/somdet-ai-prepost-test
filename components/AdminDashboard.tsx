@@ -7,12 +7,13 @@ import {
   BarChart3, FileSpreadsheet, PlusCircle, Edit3, Eye, Search, ShieldCheck, Sparkles, X,
   Trash2, AlertTriangle, RotateCcw, Check, ArrowUpRight, Clock, Award
 } from 'lucide-react';
-import { AdminAnalytics, Question } from '@/lib/supabase';
+import { AdminAnalytics, Question, supabase, isSupabaseConfigured } from '@/lib/supabase';
 import {
   getAdminAnalyticsAction, toggleSystemSettingAction, getDetailedResultsAction,
   getQuestionBankAction, upsertQuestionAction, deleteQuestionAction,
   deleteTraineeResultAction, resetAllTestResultsAction
 } from '@/actions/admin';
+import { getSystemSettingsAction } from '@/actions/quiz';
 
 interface AdminDashboardProps {
   onBackToHome: () => void;
@@ -97,10 +98,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToHome, on
 
   const loadData = async () => {
     setIsLoading(true);
-    const [analyticsRes, tableRes, qBankRes] = await Promise.all([
+    const [analyticsRes, tableRes, qBankRes, settingsRes] = await Promise.all([
       getAdminAnalyticsAction(),
       getDetailedResultsAction(),
       getQuestionBankAction(),
+      getSystemSettingsAction(),
     ]);
 
     if (analyticsRes.success && analyticsRes.data) {
@@ -108,11 +110,49 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToHome, on
     }
     setResultsTable(tableRes);
     setQuestionBank(qBankRes);
+    if (settingsRes) {
+      setPreOpen(settingsRes.pre_open);
+      setPostOpen(settingsRes.post_open);
+    }
     setIsLoading(false);
   };
 
   useEffect(() => {
     loadData();
+
+    // Supabase Realtime Channel for live settings sync across multiple admin tabs
+    let channel: any = null;
+    if (isSupabaseConfigured()) {
+      channel = supabase
+        .channel('realtime_system_settings_admin')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'system_settings' },
+          (payload: any) => {
+            if (payload.new && payload.new.key) {
+              if (payload.new.key === 'pre_test_open') {
+                setPreOpen(payload.new.value?.enabled ?? true);
+              } else if (payload.new.key === 'post_test_open') {
+                setPostOpen(payload.new.value?.enabled ?? true);
+              }
+            }
+          }
+        )
+        .subscribe();
+    }
+
+    const pollInterval = setInterval(async () => {
+      const s = await getSystemSettingsAction();
+      setPreOpen(s.pre_open);
+      setPostOpen(s.post_open);
+    }, 2500);
+
+    return () => {
+      if (channel && isSupabaseConfigured()) {
+        supabase.removeChannel(channel);
+      }
+      clearInterval(pollInterval);
+    };
   }, []);
 
   const handleToggleSetting = async (key: 'pre_test_open' | 'post_test_open', currentVal: boolean) => {
@@ -522,27 +562,41 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToHome, on
           )}
 
           {/* REAL-TIME CONTROL TOGGLES PANEL */}
-          <div className="bg-white rounded-3xl p-5 border border-sky-100 shadow-md shadow-sky-100/30 flex flex-col md:flex-row items-center justify-between gap-4">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <SwitchCamera className="w-4 h-4 text-sky-600" />
-                สวิตช์ควบคุมเปิด-ปิดระบบสอบ (Real-time Switches)
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                เปลี่ยนสถานะเปิดหรือปิดสิทธิ์ทำแบบทดสอบของผู้เรียนได้ทันที
+          <div className="bg-white rounded-3xl p-5 sm:p-6 border border-sky-100 shadow-md shadow-sky-100/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 rounded-xl bg-sky-50 text-sky-600 border border-sky-200 shadow-2xs">
+                  <SwitchCamera className="w-4 h-4" />
+                </span>
+                <h3 className="text-sm font-extrabold text-slate-900">
+                  สวิตช์ควบคุมเปิด-ปิดระบบสอบ (Real-time Live Switches)
+                </h3>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                  Live Sync
+                </span>
+              </div>
+              <p className="text-xs text-slate-500">
+                เปลี่ยนสถานะเปิดหรือปิดสิทธิ์ทำแบบทดสอบของผู้เรียนได้ทันที (ผู้เรียนเห็นการเปลี่ยนแปลงแบบเรียลไทม์ไม่ต้องรีเฟรช)
               </p>
             </div>
 
-            <div className="flex items-center gap-6">
+            <div className="flex flex-wrap items-center gap-4 sm:gap-6 self-end sm:self-auto">
               {/* Pre-test Switch */}
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-bold text-slate-700">Pre-test:</span>
+              <div className="flex items-center gap-3 p-2 rounded-2xl bg-slate-50/80 border border-slate-200/80 shadow-2xs">
+                <div className="leading-tight">
+                  <div className="text-[11px] font-bold text-slate-700">ก่อนเรียน (Pre-test)</div>
+                  <div className={`text-[10px] font-bold ${preOpen ? 'text-emerald-700' : 'text-slate-400'}`}>
+                    {preOpen ? '● เปิดรับการสอบ' : '○ ปิดระบบ'}
+                  </div>
+                </div>
                 <button
                   disabled={isToggling}
                   onClick={() => handleToggleSetting('pre_test_open', preOpen)}
-                  className={`w-12 h-6 rounded-full transition-colors p-1 relative flex items-center shadow-inner ${
-                    preOpen ? 'bg-emerald-500' : 'bg-slate-300'
+                  className={`w-12 h-6 rounded-full transition-all p-1 relative flex items-center shadow-inner cursor-pointer ${
+                    preOpen ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-slate-300 hover:bg-slate-400'
                   }`}
+                  title={preOpen ? 'คลิกเพื่อปิดระบบ Pre-test' : 'คลิกเพื่อเปิดระบบ Pre-test'}
                 >
                   <div
                     className={`w-4 h-4 rounded-full bg-white transition-transform shadow-xs ${
@@ -553,14 +607,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToHome, on
               </div>
 
               {/* Post-test Switch */}
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-bold text-slate-700">Post-test:</span>
+              <div className="flex items-center gap-3 p-2 rounded-2xl bg-slate-50/80 border border-slate-200/80 shadow-2xs">
+                <div className="leading-tight">
+                  <div className="text-[11px] font-bold text-slate-700">หลังเรียน (Post-test)</div>
+                  <div className={`text-[10px] font-bold ${postOpen ? 'text-sky-700' : 'text-slate-400'}`}>
+                    {postOpen ? '● เปิดรับการสอบ' : '○ ปิดระบบ'}
+                  </div>
+                </div>
                 <button
                   disabled={isToggling}
                   onClick={() => handleToggleSetting('post_test_open', postOpen)}
-                  className={`w-12 h-6 rounded-full transition-colors p-1 relative flex items-center shadow-inner ${
-                    postOpen ? 'bg-sky-500' : 'bg-slate-300'
+                  className={`w-12 h-6 rounded-full transition-all p-1 relative flex items-center shadow-inner cursor-pointer ${
+                    postOpen ? 'bg-sky-500 hover:bg-sky-600' : 'bg-slate-300 hover:bg-slate-400'
                   }`}
+                  title={postOpen ? 'คลิกเพื่อปิดระบบ Post-test' : 'คลิกเพื่อเปิดระบบ Post-test'}
                 >
                   <div
                     className={`w-4 h-4 rounded-full bg-white transition-transform shadow-xs ${

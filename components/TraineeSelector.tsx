@@ -12,6 +12,8 @@ import { searchTraineesAction, getTraineeStatusAction, getAllTraineesCachedActio
 interface TraineeSelectorProps {
   onSelectTrainee: (trainee: Trainee, testType: 'pre' | 'post') => void;
   onViewResult: (trainee: Trainee, testType: 'pre' | 'post', result: TestResult) => void;
+  preOpen?: boolean;
+  postOpen?: boolean;
 }
 
 const formatDuration = (seconds?: number | null, submittedAt?: string | null) => {
@@ -30,6 +32,8 @@ const formatDuration = (seconds?: number | null, submittedAt?: string | null) =>
 export const TraineeSelector: React.FC<TraineeSelectorProps> = ({
   onSelectTrainee,
   onViewResult,
+  preOpen,
+  postOpen,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState<Trainee[]>([]);
@@ -45,8 +49,12 @@ export const TraineeSelector: React.FC<TraineeSelectorProps> = ({
   }>({
     preResult: null,
     postResult: null,
-    settings: { pre_open: true, post_open: true },
+    settings: { pre_open: preOpen ?? true, post_open: postOpen ?? true },
   });
+
+  // Keep live settings synchronized instantly with parent
+  const isPreOpen = preOpen !== undefined ? preOpen : status.settings.pre_open;
+  const isPostOpen = postOpen !== undefined ? postOpen : status.settings.post_open;
 
   const [isPickingTrainee, setIsPickingTrainee] = useState(false);
 
@@ -358,16 +366,16 @@ export const TraineeSelector: React.FC<TraineeSelectorProps> = ({
                     </button>
                   ) : (
                     <button
-                      disabled={!status.settings.pre_open}
+                      disabled={!isPreOpen}
                       onClick={() => onSelectTrainee(selectedTrainee, 'pre')}
                       className={`h-11 w-full rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
-                        status.settings.pre_open
+                        isPreOpen
                           ? 'gradient-button text-white shadow-md shadow-sky-500/25 hover:scale-[1.01]'
-                          : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
+                          : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200 shadow-none'
                       }`}
                     >
-                      <PlayCircle className="w-4 h-4" />
-                      {status.settings.pre_open ? 'เริ่มทำ Pre-test' : 'ระบบ Pre-test ปิดอยู่'}
+                      <PlayCircle className={`w-4 h-4 ${isPreOpen ? 'animate-pulse' : ''}`} />
+                      {isPreOpen ? 'เริ่มทำ Pre-test' : '🔒 ปิดรับการทำแบบทดสอบชั่วคราว'}
                     </button>
                   )}
                 </div>
@@ -444,16 +452,16 @@ export const TraineeSelector: React.FC<TraineeSelectorProps> = ({
                     </button>
                   ) : (
                     <button
-                      disabled={!status.settings.post_open}
+                      disabled={!isPostOpen}
                       onClick={() => onSelectTrainee(selectedTrainee, 'post')}
                       className={`h-11 w-full rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
-                        status.settings.post_open
+                        isPostOpen
                           ? 'gradient-button text-white shadow-md shadow-sky-500/25 hover:scale-[1.01]'
-                          : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
+                          : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200 shadow-none'
                       }`}
                     >
-                      <PlayCircle className="w-4 h-4" />
-                      {status.settings.post_open ? 'เริ่มทำ Post-test' : 'ระบบ Post-test ปิดอยู่'}
+                      <PlayCircle className={`w-4 h-4 ${isPostOpen ? 'animate-pulse' : ''}`} />
+                      {isPostOpen ? 'เริ่มทำ Post-test' : '🔒 ปิดรับการทำแบบทดสอบชั่วคราว'}
                     </button>
                   )}
                 </div>

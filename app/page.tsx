@@ -7,8 +7,8 @@ import { TraineeSelector } from '@/components/TraineeSelector';
 import { QuizView } from '@/components/QuizView';
 import { ResultView } from '@/components/ResultView';
 import { AdminDashboard } from '@/components/AdminDashboard';
-import { Trainee, QuizQuestionClient, TestResult } from '@/lib/supabase';
-import { fetchQuizQuestionsAction, getTraineeStatusAction } from '@/actions/quiz';
+import { Trainee, QuizQuestionClient, TestResult, supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { fetchQuizQuestionsAction, getTraineeStatusAction, getSystemSettingsAction } from '@/actions/quiz';
 import { verifyAdminPasscodeAction, logoutAdminAction, checkAdminSessionAction } from '@/actions/admin';
 import { Lock, X, KeyRound, AlertCircle } from 'lucide-react';
 
@@ -19,7 +19,7 @@ export default function Home() {
   const [questions, setQuestions] = useState<QuizQuestionClient[]>([]);
   const [resultData, setResultData] = useState<any | null>(null);
 
-  // System Availability Status
+  // System Availability Status (Live Real-time State)
   const [preOpen, setPreOpen] = useState(true);
   const [postOpen, setPostOpen] = useState(true);
   const [isLoadingQuiz, setIsLoadingQuiz] = useState(false);
@@ -32,20 +32,52 @@ export default function Home() {
   const [adminAuthError, setAdminAuthError] = useState<string | null>(null);
   const [isVerifyingAdmin, setIsVerifyingAdmin] = useState(false);
 
-  // Initial Load: check session & settings
+  // Real-time Settings Synchronization (Supabase WebSocket + High-Frequency Fallback)
   useEffect(() => {
-    const initSettings = async () => {
-      const { settings } = await getTraineeStatusAction('placeholder-id');
-      setPreOpen(settings.pre_open);
-      setPostOpen(settings.post_open);
+    const fetchSettings = async () => {
+      const s = await getSystemSettingsAction();
+      setPreOpen(s.pre_open);
+      setPostOpen(s.post_open);
+    };
+    fetchSettings();
 
-      // Check existing admin session securely
-      const session = await checkAdminSessionAction();
+    // 1. Supabase Realtime channel for instant sub-second switch updates
+    let channel: any = null;
+    if (isSupabaseConfigured()) {
+      channel = supabase
+        .channel('realtime_system_settings_root')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'system_settings' },
+          (payload: any) => {
+            if (payload.new && payload.new.key) {
+              if (payload.new.key === 'pre_test_open') {
+                setPreOpen(payload.new.value?.enabled ?? true);
+              } else if (payload.new.key === 'post_test_open') {
+                setPostOpen(payload.new.value?.enabled ?? true);
+              }
+            }
+          }
+        )
+        .subscribe();
+    }
+
+    // 2. High-Frequency Polling fallback (every 2.5s) for zero-latency response on all devices
+    const pollInterval = setInterval(fetchSettings, 2500);
+
+    // Check existing admin session
+    checkAdminSessionAction().then((session) => {
       if (session.isAdmin) {
         setIsAdminLoggedIn(true);
       }
+    });
+
+    return () => {
+      if (channel && isSupabaseConfigured()) {
+        supabase.removeChannel(channel);
+      }
+      clearInterval(pollInterval);
     };
-    initSettings();
   }, []);
 
   // Launch Quiz for Selected Trainee
@@ -173,6 +205,8 @@ export default function Home() {
                 <TraineeSelector
                   onSelectTrainee={handleStartQuiz}
                   onViewResult={handleViewResult}
+                  preOpen={preOpen}
+                  postOpen={postOpen}
                 />
               </motion.div>
             )}

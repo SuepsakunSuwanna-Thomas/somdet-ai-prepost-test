@@ -63,13 +63,38 @@ export async function searchTraineesAction(query: string): Promise<Trainee[]> {
 }
 
 /**
+ * Get current open/close system settings for Pre-test and Post-test
+ */
+export async function getSystemSettingsAction(): Promise<{ pre_open: boolean; post_open: boolean }> {
+  try {
+    let settings = { pre_open: true, post_open: true };
+    if (isSupabaseConfigured()) {
+      const { data: sysSettings } = await supabase.from('system_settings').select('*');
+      if (sysSettings) {
+        const preSetting = sysSettings.find((s) => s.key === 'pre_test_open');
+        const postSetting = sysSettings.find((s) => s.key === 'post_test_open');
+        if (preSetting) settings.pre_open = preSetting.value.enabled ?? true;
+        if (postSetting) settings.post_open = postSetting.value.enabled ?? true;
+      }
+    } else {
+      const mock = getMockData();
+      settings.pre_open = mock.settings.pre_test_open?.enabled ?? true;
+      settings.post_open = mock.settings.post_test_open?.enabled ?? true;
+    }
+    return settings;
+  } catch (err) {
+    return { pre_open: true, post_open: true };
+  }
+}
+
+/**
  * Get Pre and Post test completion status for a specific trainee
  */
 export async function getTraineeStatusAction(traineeId: string) {
   try {
     let preResult: TestResult | null = null;
     let postResult: TestResult | null = null;
-    let settings = { pre_open: true, post_open: true };
+    let settings = await getSystemSettingsAction();
 
     if (isSupabaseConfigured()) {
       const { data: results } = await supabase
@@ -81,21 +106,11 @@ export async function getTraineeStatusAction(traineeId: string) {
         preResult = results.find((r) => r.test_type === 'pre') || null;
         postResult = results.find((r) => r.test_type === 'post') || null;
       }
-
-      const { data: sysSettings } = await supabase.from('system_settings').select('*');
-      if (sysSettings) {
-        const preSetting = sysSettings.find((s) => s.key === 'pre_test_open');
-        const postSetting = sysSettings.find((s) => s.key === 'post_test_open');
-        if (preSetting) settings.pre_open = preSetting.value.enabled ?? true;
-        if (postSetting) settings.post_open = postSetting.value.enabled ?? true;
-      }
     } else {
       const mock = getMockData();
       const userResults = mock.results.filter((r) => r.trainee_id === traineeId);
       preResult = userResults.find((r) => r.test_type === 'pre') || null;
       postResult = userResults.find((r) => r.test_type === 'post') || null;
-      settings.pre_open = mock.settings.pre_test_open?.enabled ?? true;
-      settings.post_open = mock.settings.post_test_open?.enabled ?? true;
     }
 
     return {
