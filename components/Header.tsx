@@ -78,29 +78,6 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* Center/Right: Live System Status Badges */}
-        <div className="flex items-center gap-2">
-          {/* Pre-test status pill */}
-          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-bold border transition-all ${
-            preOpen
-              ? 'bg-emerald-50 text-emerald-800 border-emerald-200/80 shadow-2xs'
-              : 'bg-slate-100 text-slate-500 border-slate-200'
-          }`}>
-            <span className={`w-2 h-2 rounded-full ${preOpen ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
-            <span>Pre-test: {preOpen ? 'เปิดสอบ' : 'ปิด'}</span>
-          </div>
-
-          {/* Post-test status pill */}
-          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-bold border transition-all ${
-            postOpen
-              ? 'bg-sky-50 text-sky-800 border-sky-200/80 shadow-2xs'
-              : 'bg-slate-100 text-slate-500 border-slate-200'
-          }`}>
-            <span className={`w-2 h-2 rounded-full ${postOpen ? 'bg-sky-500 animate-pulse' : 'bg-slate-400'}`} />
-            <span>Post-test: {postOpen ? 'เปิดสอบ' : 'ปิด'}</span>
-          </div>
-        </div>
-
         {/* Admin Trigger / Logout at Top-Right */}
         <div className="flex items-center gap-3 w-full md:w-auto justify-end">
           {isAdminLoggedIn ? (
